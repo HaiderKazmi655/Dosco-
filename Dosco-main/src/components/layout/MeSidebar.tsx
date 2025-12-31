@@ -10,16 +10,30 @@ export const MeSidebar = () => {
     const { user } = useAuth();
     const pathname = usePathname();
     const [dms, setDms] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
 
-    useEffect(() => {
+    const fetchDms = async () => {
         if (!user) return;
-        const fetchDms = async () => {
-            const { data } = await supabase.from('dms')
+        setLoading(true);
+        try {
+            const { data, error } = await supabase.from('dms')
                 .select('*')
                 .or(`pair_a.eq.${user.username},pair_b.eq.${user.username}`)
                 .order('time', { ascending: false });
-            if(data) setDms(data);
-        };
+            if (error) {
+                console.error('Error fetching DMs:', error);
+            } else if (data) {
+                setDms(data);
+            }
+        } catch (error) {
+            console.error('Error fetching DMs:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!user) return;
         fetchDms();
 
         // Subscribe to new DMs
@@ -35,6 +49,21 @@ export const MeSidebar = () => {
 
         return () => {
             supabase.removeChannel(channel);
+        };
+    }, [user]);
+
+    // Listen for sync completion events
+    useEffect(() => {
+        if (!user) return;
+        const handleSyncComplete = () => {
+            // Refresh DMs after sync
+            setTimeout(() => {
+                fetchDms();
+            }, 1000);
+        };
+        window.addEventListener('friendsSynced', handleSyncComplete);
+        return () => {
+            window.removeEventListener('friendsSynced', handleSyncComplete);
         };
     }, [user]);
 
@@ -58,7 +87,17 @@ export const MeSidebar = () => {
                 
                 <div className="flex items-center justify-between text-xs font-bold text-dc-text-muted uppercase px-2 mb-2 mt-4 hover:text-dc-text-normal cursor-default group">
                     <span>Direct Messages</span>
-                    <span className="cursor-pointer text-dc-text-normal opacity-0 group-hover:opacity-100">+</span>
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={fetchDms}
+                            disabled={loading}
+                            className="cursor-pointer text-dc-text-normal opacity-0 group-hover:opacity-100 hover:text-white"
+                            title="Refresh DM list"
+                        >
+                            ↻
+                        </button>
+                        <span className="cursor-pointer text-dc-text-normal opacity-0 group-hover:opacity-100">+</span>
+                    </div>
                 </div>
                 
                 {dms.map(dm => {
